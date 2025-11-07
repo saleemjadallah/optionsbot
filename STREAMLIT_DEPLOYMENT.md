@@ -28,13 +28,15 @@ Now you need to deploy the Streamlit frontend. Here are your options:
    - Branch: `main`
    - Main file path: `frontend/app.py`
 
-3. **Set Environment Variables**
-   Click "Advanced settings" and add:
+3. **Set Secrets (Environment Variables)**
+   Click "Advanced settings" → "Secrets" and paste:
+   ```toml
+   TRADING_BOT_API_URL = "https://optionsbot-production.up.railway.app"
+   TASTYTRADE_USERNAME = "saleem86@gmail.com"
+   TASTYTRADE_PASSWORD = "olaabdel88"
    ```
-   TRADING_BOT_API_URL=https://optionsbot-production.up.railway.app
-   TASTYTRADE_USERNAME=saleem86@gmail.com
-   TASTYTRADE_PASSWORD=olaabdel88
-   ```
+
+   **Important:** Must be in TOML format with quotes!
 
 4. **Deploy!**
    - Click "Deploy"
