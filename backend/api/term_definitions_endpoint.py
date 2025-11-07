@@ -137,7 +137,7 @@ Requirements:
 Definition:"""
 
         response = client.chat.completions.create(
-            model="gpt-4o-mini",  # Using cost-effective model
+            model="o4-mini",  # Using latest cost-effective reasoning model
             messages=[
                 {
                     "role": "system",

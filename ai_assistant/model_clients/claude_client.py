@@ -13,8 +13,8 @@ except ImportError:  # pragma: no cover - dependency optional in some deployment
 
 class ClaudeClient:
     def __init__(self, api_key: Optional[str] = None, model: Optional[str] = None) -> None:
-        self.api_key = api_key or os.getenv("ANTHROPIC_API_KEY")
-        self.model = model or os.getenv("CLAUDE_MODEL", "claude-3-5-sonnet-20240620")
+        self.api_key = api_key or os.getenv("ANTHROPIC_API_KEY") or os.getenv("CLAUDE_API_KEY")
+        self.model = model or os.getenv("CLAUDE_MODEL", "claude-sonnet-4-5")
         self.max_tokens = 6000
         self.temperature = 0.7
         self.client = (

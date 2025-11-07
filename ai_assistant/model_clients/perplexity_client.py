@@ -13,7 +13,8 @@ class PerplexityClient:
 
     def __init__(self, api_key: Optional[str] = None, model: Optional[str] = None) -> None:
         self.api_key = api_key or os.getenv("PERPLEXITY_API_KEY")
-        self.model = model or os.getenv("PERPLEXITY_MODEL", "pplx-70b-chat")
+        default_model = "sonar-pro"
+        self.model = model or os.getenv("PERPLEXITY_MODEL", default_model)
 
     async def chat(
         self,
@@ -40,8 +41,12 @@ class PerplexityClient:
         async with httpx.AsyncClient(timeout=30) as client:
             response = await client.post(self.BASE_URL, json=payload, headers=headers)
             if response.status_code != 200:
+                try:
+                    detail = response.json()
+                except ValueError:
+                    detail = response.text
                 return {
-                    "answer": f"Perplexity error: {response.text}",
+                    "answer": f"Perplexity error ({response.status_code}): {detail}",
                     "error": True,
                 }
             data = response.json()

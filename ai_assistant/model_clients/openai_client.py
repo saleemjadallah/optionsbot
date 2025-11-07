@@ -14,7 +14,7 @@ except ImportError:  # pragma: no cover - optional dependency
 class OpenAIClient:
     def __init__(self, api_key: Optional[str] = None, model: Optional[str] = None) -> None:
         self.api_key = api_key or os.getenv("OPENAI_API_KEY")
-        self.model = model or os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+        self.model = model or os.getenv("OPENAI_MODEL", "o4-mini")
         self.client = AsyncOpenAI(api_key=self.api_key) if (AsyncOpenAI and self.api_key) else None
 
     async def chat(
