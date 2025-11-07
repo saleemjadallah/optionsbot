@@ -6,11 +6,21 @@ directly from the authenticated sandbox (or production) account.
 
 from __future__ import annotations
 
+from datetime import datetime, time
 from typing import Any, Dict, List, Optional
 
 from config.universe import get_default_universe
 from utils.tastytrade_auth import get_auth_manager
 from utils.strategy_engine import StrategyEngine
+
+try:  # pragma: no cover - zoneinfo availability depends on python version
+    from zoneinfo import ZoneInfo
+except ImportError:  # pragma: no cover
+    ZoneInfo = None  # type: ignore
+
+US_EASTERN = ZoneInfo("America/New_York") if ZoneInfo else None
+REGULAR_OPEN = time(9, 30)
+REGULAR_CLOSE = time(16, 0)
 
 
 class TradingBotAPI:
@@ -150,6 +160,7 @@ class TradingBotAPI:
             "universe_ideas": universe_ideas,
             "exposures": exposures,
             "universe_symbols": universe,
+            "market_state": self._market_state(),
         }
 
     def get_trade_opportunities(self) -> List[Dict]:
@@ -178,6 +189,25 @@ class TradingBotAPI:
     # ------------------------------------------------------------------
     # Utility
     # ------------------------------------------------------------------
+
+    def _market_state(self) -> Dict[str, Any]:
+        """Classify whether we are inside regular trading hours."""
+        now = datetime.now(US_EASTERN) if US_EASTERN else datetime.utcnow()
+        is_weekday = now.weekday() < 5
+        in_session = REGULAR_OPEN <= now.time() <= REGULAR_CLOSE
+        is_open = is_weekday and in_session
+        label = "On-Market Analysis" if is_open else "Off-Market Snapshot"
+        basis = (
+            "Live quotes captured during regular session hours."
+            if is_open
+            else "Quotes captured outside regular hours (uses latest available prices)."
+        )
+        return {
+            "is_open": is_open,
+            "label": label,
+            "basis": basis,
+            "as_of": now.isoformat(),
+        }
 
     @staticmethod
     def _safe_float(value) -> float:

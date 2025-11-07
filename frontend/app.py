@@ -54,6 +54,23 @@ HEADER_STYLE = """
         box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
         border: 1px solid rgba(0,0,0,0.05);
     }
+    .analysis-tag {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+        font-size: 0.85rem;
+        font-weight: 600;
+        padding: 0.35rem 0.8rem;
+        border-radius: 999px;
+        margin: 0.3rem 0 0.8rem;
+        color: white;
+    }
+    .analysis-tag.on {
+        background: linear-gradient(120deg, #1b5e20, #388e3c);
+    }
+    .analysis-tag.off {
+        background: linear-gradient(120deg, #b71c1c, #f44336);
+    }
 </style>
 """
 st.markdown(HEADER_STYLE, unsafe_allow_html=True)
@@ -288,6 +305,22 @@ class LiveTradingApp:
             del st.session_state.watchlist_error
         st.rerun()
 
+    def _render_market_state_tag(self, market_state: Optional[Dict[str, Any]]) -> None:
+        """Display whether the ensemble snapshot is based on on/off market data."""
+        if not market_state:
+            return
+        is_open = bool(market_state.get("is_open"))
+        tag_class = "on" if is_open else "off"
+        emoji = "🟢" if is_open else "🌙"
+        label = market_state.get("label", "Market Status")
+        basis = market_state.get("basis", "")
+        st.markdown(
+            f"<div class='analysis-tag {tag_class}'>{emoji} {label}</div>",
+            unsafe_allow_html=True,
+        )
+        if basis:
+            st.caption(basis)
+
     # ------------------------------------------------------------------
     # Page renderers
     # ------------------------------------------------------------------
@@ -492,6 +525,7 @@ class LiveTradingApp:
         if active_universe:
             universe_caption += f" Tracking: {', '.join(active_universe)}."
         st.caption(universe_caption)
+        self._render_market_state_tag(strategy_context.get("market_state"))
         col_edge, col_conf = st.columns(2)
         min_edge = col_edge.slider(
             "Minimum Edge (%)",
