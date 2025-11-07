@@ -69,3 +69,8 @@ aiofiles>=23.0.0
 python-multipart>=0.0.7
 certifi>=2023.0.0
 python-dateutil>=2.8.2
+
+# AI Assistant integrations
+openai>=1.14.0
+anthropic>=0.39.0
+httpx>=0.27.0

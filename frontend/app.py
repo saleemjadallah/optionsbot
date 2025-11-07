@@ -19,6 +19,7 @@ from streamlit_option_menu import option_menu
 
 from utils.api_client import TradingBotAPI
 from utils.strategy_engine import StrategyEngine
+from ui.chat_interface import render_chat_interface
 from config.universe import get_default_universe, parse_symbol_list
 # ----------------------------------------------------------------------
 # Page configuration
@@ -234,8 +235,16 @@ class LiveTradingApp:
         with st.sidebar:
             selected = option_menu(
                 "Navigation",
-                ["Overview", "Portfolio", "Strategies", "Risk", "Trade Terminal", "Tastytrade"],
-                icons=["speedometer", "briefcase", "diagram-3", "activity", "cursor", "key"],
+                [
+                    "Overview",
+                    "Portfolio",
+                    "Strategies",
+                    "Risk",
+                    "Trade Terminal",
+                    "Jeffrey",
+                    "Tastytrade",
+                ],
+                icons=["speedometer", "briefcase", "diagram-3", "activity", "cursor", "robot", "key"],
                 menu_icon="cast",
                 default_index=0,
             )
@@ -610,6 +619,14 @@ class LiveTradingApp:
         else:
             st.info("No proactive opportunities met the edge thresholds this cycle.")
 
+    def render_ai_assistant(self) -> None:
+        if not self.api.can_use_tastytrade():
+            st.info(
+                "Authenticate with Tastytrade so Jeffrey can read live portfolio and risk context. "
+                "He can still respond using cached information."
+            )
+        render_chat_interface()
+
     def render_risk(self) -> None:
         if not self.ensure_snapshot():
             return
@@ -904,6 +921,8 @@ class LiveTradingApp:
             self.render_risk()
         elif page == "Trade Terminal":
             self.render_trade_terminal()
+        elif page == "Jeffrey":
+            self.render_ai_assistant()
         elif page == "Tastytrade":
             self.render_tastytrade_page()
 
