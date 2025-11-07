@@ -53,6 +53,29 @@ def create_app() -> FastAPI:
         except RuntimeError as exc:
             logger.warning("MarketDataService unavailable: %s", exc)
 
+    @app.get("/")
+    async def root() -> dict[str, object]:
+        """Root endpoint with API information."""
+        return {
+            "name": "Options Ensemble Service",
+            "version": "1.0.0",
+            "status": "running",
+            "endpoints": {
+                "health": "/health",
+                "market_data": "POST /market-data/options",
+                "ensemble_ideas": "POST /ensemble/ideas",
+                "docs": "/docs",
+                "openapi": "/openapi.json"
+            },
+            "features": [
+                "DXLink real-time streaming",
+                "Greeks calculation",
+                "Model ensemble trading ideas",
+                "Risk-adjusted strategies"
+            ],
+            "timestamp": datetime.utcnow().isoformat(),
+        }
+
     @app.get("/health")
     async def healthcheck() -> dict[str, str]:
         scanner_ready = state["scanner"] is not None
