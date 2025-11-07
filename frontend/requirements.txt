@@ -37,6 +37,7 @@ cachetools>=5.3.1
 # API Integration
 requests>=2.31.0
 websocket-client>=1.6.1
+tastytrade>=6.0
 
 # Development & Testing
 pytest>=7.4.0
