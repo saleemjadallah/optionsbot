@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python:*)",
+      "Bash(grep:*)",
+      "Bash(pip install:*)",
+      "Bash(chmod:*)",
+      "Bash(mkdir:*)",
+      "Bash(source:*)",
+      "Bash(uvicorn:*)",
+      "Bash(cat:*)",
+      "Bash(streamlit:*)",
+      "Bash(curl:*)",
+      "Bash(git add:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

@@ -1,0 +1,100 @@
+# Alerting Rules for Options Trading Bot
+# =======================================
+
+groups:
+  - name: dashboard_alerts
+    interval: 30s
+    rules:
+      # Dashboard availability
+      - alert: DashboardDown
+        expr: up{job="streamlit-dashboard"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          component: dashboard
+        annotations:
+          summary: "Trading Dashboard is down"
+          description: "The Streamlit dashboard has been down for more than 2 minutes."
+
+      # High memory usage
+      - alert: HighMemoryUsage
+        expr: (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) > 0.9
+        for: 5m
+        labels:
+          severity: warning
+          component: system
+        annotations:
+          summary: "High memory usage detected"
+          description: "Memory usage is above 90% for more than 5 minutes."
+
+      # High CPU usage
+      - alert: HighCPUUsage
+        expr: 100 - (avg by(instance) (rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 80
+        for: 5m
+        labels:
+          severity: warning
+          component: system
+        annotations:
+          summary: "High CPU usage detected"
+          description: "CPU usage is above 80% for more than 5 minutes."
+
+  - name: redis_alerts
+    interval: 30s
+    rules:
+      # Redis down
+      - alert: RedisDown
+        expr: up{job="redis"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          component: redis
+        annotations:
+          summary: "Redis cache is down"
+          description: "Redis server has been down for more than 1 minute."
+
+      # Redis memory usage
+      - alert: RedisHighMemory
+        expr: redis_memory_used_bytes / redis_memory_max_bytes > 0.9
+        for: 5m
+        labels:
+          severity: warning
+          component: redis
+        annotations:
+          summary: "Redis memory usage is high"
+          description: "Redis is using more than 90% of allocated memory."
+
+  - name: trading_alerts
+    interval: 30s
+    rules:
+      # Trading API down
+      - alert: TradingAPIDown
+        expr: up{job="trading-bot-api"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          component: trading-api
+        annotations:
+          summary: "Trading Bot API is down"
+          description: "The Trading Bot API has been down for more than 2 minutes."
+
+      # High API response time
+      - alert: HighAPILatency
+        expr: histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[5m])) > 2
+        for: 5m
+        labels:
+          severity: warning
+          component: trading-api
+        annotations:
+          summary: "High API latency detected"
+          description: "95th percentile API response time is above 2 seconds."
+
+      # Database connection issues
+      - alert: DatabaseConnectionFailure
+        expr: pg_up == 0
+        for: 1m
+        labels:
+          severity: critical
+          component: database
+        annotations:
+          summary: "Database connection failure"
+          description: "Cannot connect to PostgreSQL database."

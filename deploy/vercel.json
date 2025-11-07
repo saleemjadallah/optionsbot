@@ -1,0 +1,19 @@
+{
+  "name": "trading-system-api",
+  "version": 2,
+  "builds": [
+    {
+      "src": "backend/api/endpoints.py",
+      "use": "@vercel/python"
+    }
+  ],
+  "routes": [
+    {
+      "src": "/(.*)",
+      "dest": "backend/api/endpoints.py"
+    }
+  ],
+  "env": {
+    "PYTHON_VERSION": "3.11"
+  }
+}

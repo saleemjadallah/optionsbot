@@ -1,0 +1,52 @@
+# Frontend Requirements for Options Trading Bot Dashboard
+# ======================================================
+
+# Core Streamlit Framework
+streamlit>=1.28.0
+streamlit-option-menu>=0.3.6
+
+# Data Manipulation & Analysis
+pandas>=1.5.3
+numpy>=1.24.3
+
+# Visualization & Plotting
+plotly>=5.15.0
+
+# Date & Time Handling
+python-dateutil>=2.8.2
+
+# Additional UI Components
+streamlit-aggrid>=0.3.4.post3  # Enhanced data tables
+streamlit-elements>=0.1.0       # Custom HTML/React components
+streamlit-ace>=0.1.1           # Code editor
+
+# Real-time Features
+streamlit-autorefresh>=1.0.1   # Auto-refresh functionality
+streamlit-echarts>=0.4.0       # Advanced charts
+
+# Authentication & Security (if needed)
+streamlit-authenticator>=0.2.3
+
+# File Handling
+openpyxl>=3.1.2                # Excel file support
+xlsxwriter>=3.1.2              # Excel writing
+
+# Performance & Caching
+cachetools>=5.3.1
+
+# API Integration
+requests>=2.31.0
+websocket-client>=1.6.1
+
+# Development & Testing
+pytest>=7.4.0
+
+# Additional Dependencies from Main Trading Bot
+# (These should already be installed if running the full system)
+# quantlib-python
+# py-vollib
+# tastytrade
+
+# Optional: Advanced Components
+# streamlit-folium>=0.15.0     # Maps (if needed for geographical analysis)
+# streamlit-lottie>=0.0.5      # Animations

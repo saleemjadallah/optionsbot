@@ -1,0 +1,61 @@
+# Environment variables
+.env
+.env.local
+.env.production
+
+# Certificates and keys
+nginx/ssl/*.pem
+nginx/ssl/*.key
+nginx/ssl/*.crt
+*.pem
+*.key
+*.crt
+
+# Logs
+logs/
+*.log
+nginx/logs/
+
+# Data
+data/
+backups/
+
+# Cache
+.streamlit/cache/
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Docker volumes
+dashboard_cache/
+redis_data/
+prometheus_data/
+grafana_data/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+*.cover
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+*.bak
+
+# Build artifacts
+dist/
+build/
+*.egg-info/

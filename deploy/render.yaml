@@ -1,0 +1,48 @@
+# Render.com Deployment Configuration
+# Auto-deploy both frontend and backend
+
+services:
+  # Backend API Service
+  - type: web
+    name: trading-api
+    runtime: python
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "cd backend && uvicorn api.endpoints:app --host 0.0.0.0 --port $PORT"
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11
+      - key: DATABASE_URL
+        fromDatabase:
+          name: trading-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          type: redis
+          name: trading-redis
+          property: connectionString
+
+  # Frontend Dashboard
+  - type: web
+    name: trading-dashboard
+    runtime: python
+    buildCommand: "pip install streamlit streamlit-option-menu plotly pandas"
+    startCommand: "cd frontend && streamlit run app.py --server.port $PORT --server.address 0.0.0.0"
+    envVars:
+      - key: API_URL
+        fromService:
+          type: web
+          name: trading-api
+          property: host
+
+# Databases
+databases:
+  - name: trading-db
+    plan: starter
+    databaseName: options_trader
+    user: trader
+
+# Redis
+services:
+  - type: redis
+    name: trading-redis
+    plan: starter
