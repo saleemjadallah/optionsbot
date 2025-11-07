@@ -1,8 +1,10 @@
-[phases.setup]
-nixPkgs = ["python310", "gcc"]
+# Railway deployment configuration for backend service only
+
+[variables]
+NIXPACKS_PYTHON_VERSION = "3.10"
 
 [phases.install]
-cmds = ["pip install --upgrade pip", "pip install -r backend/requirements.txt"]
+cmds = ["pip install -r backend/requirements.txt"]
 
 [start]
 cmd = "cd backend && uvicorn service.app:app --host 0.0.0.0 --port ${PORT:-8000}"
