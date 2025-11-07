@@ -516,12 +516,36 @@ class TastytradeAuthManager:
         except ValueError:
             return response.text or "Unknown error"
 
-        error = payload.get("error") or payload.get("errors") or payload.get("data") or payload
-        if isinstance(error, dict):
-            message = error.get("message") or error.get("code") or str(error)
-        else:
-            message = str(error)
-        return message or "Unknown error"
+        sections: List[str] = []
+
+        single_error = payload.get("error")
+        if isinstance(single_error, dict):
+            base_msg = single_error.get("message") or single_error.get("code")
+            if base_msg:
+                sections.append(base_msg)
+
+        list_errors = payload.get("errors")
+        if isinstance(list_errors, list):
+            for err in list_errors:
+                if not isinstance(err, dict):
+                    continue
+                msg = err.get("message") or err.get("code")
+                detail = err.get("details")
+                if isinstance(detail, dict):
+                    detail_parts = [f"{k}: {v}" for k, v in detail.items()]
+                    detail_text = "; ".join(detail_parts)
+                    msg = f"{msg} ({detail_text})" if detail_text else msg
+                if msg:
+                    sections.append(msg)
+
+        if not sections:
+            detail = payload.get("detail") or payload.get("message")
+            if detail:
+                sections.append(str(detail))
+
+        if sections:
+            return " | ".join(sections)
+        return str(payload) or "Unknown error"
 
 
 
