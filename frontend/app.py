@@ -125,6 +125,8 @@ class LiveTradingApp:
             st.session_state.universe_min_conf = StrategyEngine.ENSEMBLE_CONFIDENCE_THRESHOLD * 100
         if "idea_dry_runs" not in st.session_state:
             st.session_state.idea_dry_runs = {}
+        if "favorite_ideas" not in st.session_state:
+            st.session_state.favorite_ideas = {}
 
     def _on_universe_change(self) -> None:
         """
@@ -338,6 +340,12 @@ class LiveTradingApp:
         expiry = idea.get("order_example", {}).get("legs", [{}])[0].get("symbol", "")
         return f"{group}:{symbol}:{strategy}:{expiry}"
 
+    def _favorite_key(self, idea: Dict[str, Any]) -> str:
+        return f"{idea.get('symbol')}::{idea.get('suggested_strategy')}::{idea.get('trade_idea')}"
+
+    def _favorites(self) -> Dict[str, Dict[str, Any]]:
+        return st.session_state.favorite_ideas
+
     def _preview_order(self, payload: Dict[str, Any], cache_key: str) -> None:
         """Send a dry-run request to Tastytrade and store the response."""
         if not payload:
@@ -369,6 +377,56 @@ class LiveTradingApp:
         if cached:
             st.caption("Latest Tastytrade dry-run (not executed):")
             st.json(cached.get("preview"))
+
+    def _compute_star_rating(self, idea: Dict[str, Any]) -> int:
+        metrics = idea.get("metrics", {})
+        edge = abs(metrics.get("edge_pct", 0.0))
+        conf = metrics.get("confidence_pct", 0.0)
+        consensus_gap = abs(metrics.get("consensus_price", 0.0) - metrics.get("market_price", 0.0))
+
+        edge_norm = min(edge / 10.0, 1.0)  # 10% edge -> full credit
+        conf_norm = min(conf / 80.0, 1.0)  # 80% confidence -> full
+        gap_norm = min(consensus_gap / 2.0, 1.0)  # $2 gap -> full
+
+        score = 1.0 + edge_norm * 2.0 + conf_norm * 1.5 + gap_norm * 0.5
+        return max(1, min(5, round(score)))
+
+    def _star_badge(self, stars: int) -> str:
+        return "★" * stars + "☆" * (5 - stars)
+
+    def _render_favorite_button(self, idea: Dict[str, Any], key_suffix: str) -> None:
+        fav_key = self._favorite_key(idea)
+        favorites = self._favorites()
+        if fav_key in favorites:
+            if st.button("★ Remove Favorite", key=f"fav_remove_{key_suffix}"):
+                favorites.pop(fav_key, None)
+                st.session_state.favorite_ideas = favorites
+                st.rerun()
+        else:
+            if st.button("☆ Save as Favorite", key=f"fav_save_{key_suffix}"):
+                favorites[fav_key] = idea
+                st.session_state.favorite_ideas = favorites
+                st.success("Saved to favorites.")
+
+    def _render_favorites_section(self) -> None:
+        favorites = list(self._favorites().values())
+        st.markdown("### ⭐️ Saved Favorite Ideas")
+        if not favorites:
+            st.info("No favorites saved yet. Use the ☆ button on any idea to pin it here.")
+            return
+        for fav in favorites:
+            stars = self._star_badge(self._compute_star_rating(fav))
+            with st.expander(f"{fav.get('symbol')} — {fav.get('suggested_strategy')} {stars}", expanded=False):
+                st.write(f"**Signal:** {fav.get('signal')}")
+                st.write(fav.get("rationale"))
+                st.write(fav.get("trade_idea"))
+                metrics = fav.get("metrics", {})
+                if metrics:
+                    metrics_df = pd.DataFrame(
+                        [{"Metric": k.replace('_', ' ').title(), "Value": v} for k, v in metrics.items()]
+                    )
+                    st.table(metrics_df)
+                st.caption("Saved snapshot. Re-run ensemble for up-to-date pricing before trading.")
 
     # ------------------------------------------------------------------
     # Page renderers
@@ -551,8 +609,11 @@ class LiveTradingApp:
         st.caption("Recommendations generated from live positions and hedging logic.")
 
         if opportunities:
-            for idea in opportunities:
-                with st.expander(f"{idea['symbol']} — {idea['suggested_strategy']}", expanded=False):
+            for idx, idea in enumerate(opportunities):
+                stars = self._compute_star_rating(idea)
+                header = f"{idea['symbol']} — {idea['suggested_strategy']} {self._star_badge(stars)}"
+                with st.expander(header, expanded=False):
+                    st.markdown(f"**Rating:** {self._star_badge(stars)} ({stars}/5)")
                     st.write(f"**Signal:** {idea['signal']}")
                     st.write(idea["rationale"])
                     st.write(idea["trade_idea"])
@@ -564,6 +625,7 @@ class LiveTradingApp:
                         st.table(metrics_df)
                     st.caption("Example order structure (edit before use):")
                     st.code(json.dumps(idea["order_example"], indent=2), language="json")
+                    self._render_favorite_button(idea, f"live_{idx}")
                     self._render_preview_controls(idea, "live")
         else:
             st.info("No trade ideas generated for the current portfolio.")
@@ -602,8 +664,11 @@ class LiveTradingApp:
             st.rerun()
 
         if universe_ideas:
-            for idea in universe_ideas:
-                with st.expander(f"{idea['symbol']} — {idea['suggested_strategy']}", expanded=False):
+            for idx, idea in enumerate(universe_ideas):
+                stars = self._compute_star_rating(idea)
+                header = f"{idea['symbol']} — {idea['suggested_strategy']} {self._star_badge(stars)}"
+                with st.expander(header, expanded=False):
+                    st.markdown(f"**Rating:** {self._star_badge(stars)} ({stars}/5)")
                     st.write(f"**Signal:** {idea['signal']}")
                     st.write(idea["rationale"])
                     st.write(idea["trade_idea"])
@@ -615,9 +680,12 @@ class LiveTradingApp:
                         st.table(metrics_df)
                     st.caption("Sample order (validate pricing before trading):")
                     st.code(json.dumps(idea["order_example"], indent=2), language="json")
+                    self._render_favorite_button(idea, f"universe_{idx}")
                     self._render_preview_controls(idea, "universe")
         else:
             st.info("No proactive opportunities met the edge thresholds this cycle.")
+
+        self._render_favorites_section()
 
     def render_ai_assistant(self) -> None:
         if not self.api.can_use_tastytrade():
