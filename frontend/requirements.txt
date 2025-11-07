@@ -40,6 +40,12 @@ websocket-client>=1.6.1
 # Pinned to 10.x - version 11+ has breaking API changes
 tastytrade>=10.0,<11.0
 
+# Machine Learning (required for ModelEnsemble when ENABLE_FRONTEND_ENSEMBLE=true)
+scikit-learn>=1.3.0
+scipy>=1.10.0
+torch>=2.0.0
+joblib>=1.3.0
+
 # Development & Testing
 pytest>=7.4.0
 

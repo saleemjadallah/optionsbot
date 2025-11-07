@@ -1,0 +1,107 @@
+╔══════════════════════════════════════════════════════════════════════════════╗
+║                                                                              ║
+║          STREAMLIT CLOUD: Enable Universe Scanning (Quick Fix)              ║
+║                                                                              ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+
+THE PROBLEM:
+  Universe scan returns 0 trades because ENABLE_FRONTEND_ENSEMBLE is not set
+
+THE SOLUTION:
+  Configure Streamlit Cloud secrets + update requirements.txt
+
+═══════════════════════════════════════════════════════════════════════════════
+
+STEP 1: Add Secrets in Streamlit Cloud Web UI
+───────────────────────────────────────────────────────────────────────────────
+
+  1. Go to: https://share.streamlit.io/
+  2. Find your app → Click ⚙️ → Settings → Secrets
+  3. Add this (TOML format):
+
+     ┌─────────────────────────────────────────────────────────────────────────┐
+     │ ENABLE_FRONTEND_ENSEMBLE = "true"                                       │
+     │ ENSEMBLE_EDGE_THRESHOLD = "0.00"                                        │
+     │ ENSEMBLE_CONFIDENCE_THRESHOLD = "0.00"                                  │
+     │ ENSEMBLE_RISK_LEVEL = "moderate"                                        │
+     └─────────────────────────────────────────────────────────────────────────┘
+
+  4. Click Save → App will auto-restart
+
+═══════════════════════════════════════════════════════════════════════════════
+
+STEP 2: Update Requirements (Already Done For You!)
+───────────────────────────────────────────────────────────────────────────────
+
+  I've already added the ML dependencies to frontend/requirements.txt:
+
+  ✅ scikit-learn>=1.3.0
+  ✅ scipy>=1.10.0
+  ✅ torch>=2.0.0
+  ✅ joblib>=1.3.0
+
+  Now commit and push:
+
+     git add frontend/requirements.txt
+     git commit -m "Add ML dependencies for ensemble support"
+     git push
+
+  Streamlit Cloud will auto-redeploy with new dependencies.
+
+═══════════════════════════════════════════════════════════════════════════════
+
+STEP 3: Verify It's Working
+───────────────────────────────────────────────────────────────────────────────
+
+  After redeployment:
+
+  1. Open your Streamlit Cloud app
+  2. Navigate to Universe Scan
+  3. Click "Scan" or "Refresh"
+  4. Check logs: Manage app → Logs
+
+  You should see:
+    ✓ "Analyzing X symbols..."
+    ✓ Trade ideas appear
+
+═══════════════════════════════════════════════════════════════════════════════
+
+WHAT I CREATED FOR YOU:
+───────────────────────────────────────────────────────────────────────────────
+
+  ✅ frontend/.env
+     - Local development configuration (both options documented)
+
+  ✅ ENSEMBLE_FIX_GUIDE.md
+     - Complete guide for local development (2 options)
+
+  ✅ STREAMLIT_CLOUD_ENSEMBLE_SETUP.md
+     - Detailed Streamlit Cloud setup with troubleshooting
+
+  ✅ STREAMLIT_CLOUD_QUICK_FIX.md
+     - Quick reference for Streamlit Cloud (this issue)
+
+  ✅ frontend/requirements.txt (updated)
+     - Added ML dependencies required for ensemble
+
+═══════════════════════════════════════════════════════════════════════════════
+
+WHY THIS FIXES IT:
+───────────────────────────────────────────────────────────────────────────────
+
+  Without configuration:
+    strategy_engine.py:173-176 → Returns [] immediately ❌
+
+  With ENABLE_FRONTEND_ENSEMBLE=true:
+    strategy_engine.py:258-317 → Runs local ensemble ✅
+    ModelEnsemble loads → Analyzes symbols → Returns predictions
+
+═══════════════════════════════════════════════════════════════════════════════
+
+NEED HELP?
+───────────────────────────────────────────────────────────────────────────────
+
+  See detailed guides:
+  • STREAMLIT_CLOUD_QUICK_FIX.md
+  • STREAMLIT_CLOUD_ENSEMBLE_SETUP.md
+  • ENSEMBLE_FIX_GUIDE.md
