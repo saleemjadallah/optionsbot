@@ -300,15 +300,41 @@ class MarketDataService:
 
     @staticmethod
     def _bootstrap_history(quote: Optional[MarketData]) -> Dict[str, List[float]]:
-        price = max(MarketDataService._market_price(quote), 1.0)
-        volume = float(
-            getattr(quote, "volume", None)
-            or getattr(quote, "total_volume", None)
-            or 1_000_000
-        )
-        closes = [price * (1 + 0.0015 * np.sin(idx / 3.0)) for idx in range(30)]
-        volumes = [max(1.0, volume * (0.95 + 0.02 * np.cos(idx / 4.0))) for idx in range(30)]
-        return {"close": closes, "volume": volumes}
+        closes: List[float] = []
+        volumes: List[float] = []
+
+        def push_close(value: Optional[Decimal]) -> None:
+            if value is not None:
+                closes.append(float(value))
+
+        def push_volume(value: Optional[Decimal]) -> None:
+            if value is not None:
+                volumes.append(max(1.0, float(value)))
+
+        if quote:
+            push_close(getattr(quote, "prev_day_close", None))
+            push_close(getattr(quote, "day_open", None))
+            push_close(getattr(quote, "day_low", None))
+            push_close(getattr(quote, "day_high", None))
+            push_close(getattr(quote, "day_close", None))
+            push_close(getattr(quote, "close", None))
+            push_close(getattr(quote, "last", None))
+            push_close(getattr(quote, "mid", None))
+            push_volume(getattr(quote, "volume", None))
+            push_volume(getattr(quote, "open_interest", None))
+
+        if not closes:
+            closes.append(max(MarketDataService._market_price(quote), 1.0))
+
+        while len(closes) < 30:
+            closes.append(closes[-1])
+
+        if not volumes:
+            volumes = [1_000_000.0]
+        while len(volumes) < 30:
+            volumes.append(volumes[-1])
+
+        return {"close": closes[:30], "volume": volumes[:30]}
 
     @staticmethod
     def _mid_from_quote(quote: Dict[str, Optional[float]]) -> Optional[float]:
