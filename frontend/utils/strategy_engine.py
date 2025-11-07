@@ -409,6 +409,9 @@ class StrategyEngine:
             quote = None
         if quote:
             self.option_quote_cache[option_symbol] = quote
+        else:
+            # Cache the miss briefly to avoid hammering for unavailable contracts
+            self.option_quote_cache[option_symbol] = None
         return quote
 
     def _bootstrap_market_history(self, quote: MarketData) -> pd.DataFrame:
