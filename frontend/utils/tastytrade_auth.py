@@ -480,7 +480,7 @@ class TastytradeAuthManager:
             headers=self._get_headers(),
             timeout=15,
         )
-        response.raise_for_status()
+        self._raise_for_tastytrade_error(response, "dry run")
         return response.json()
 
     def place_order(self, order: Dict[str, Any], account_number: Optional[str] = None) -> Dict[str, Any]:
@@ -497,8 +497,31 @@ class TastytradeAuthManager:
             headers=self._get_headers(),
             timeout=15,
         )
-        response.raise_for_status()
+        self._raise_for_tastytrade_error(response, "order placement")
         return response.json()
+
+    def _raise_for_tastytrade_error(self, response: requests.Response, context: str) -> None:
+        try:
+            response.raise_for_status()
+        except requests.HTTPError as exc:  # pragma: no cover - network errors
+            detail = self._extract_error_detail(response)
+            raise RuntimeError(
+                f"Tastytrade {context} failed ({response.status_code}): {detail}"
+            ) from exc
+
+    @staticmethod
+    def _extract_error_detail(response: requests.Response) -> str:
+        try:
+            payload = response.json()
+        except ValueError:
+            return response.text or "Unknown error"
+
+        error = payload.get("error") or payload.get("errors") or payload.get("data") or payload
+        if isinstance(error, dict):
+            message = error.get("message") or error.get("code") or str(error)
+        else:
+            message = str(error)
+        return message or "Unknown error"
 
 
 
