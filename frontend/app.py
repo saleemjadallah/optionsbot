@@ -122,6 +122,8 @@ class LiveTradingApp:
             st.session_state.universe_min_edge = StrategyEngine.ENSEMBLE_EDGE_THRESHOLD * 100
         if "universe_min_conf" not in st.session_state:
             st.session_state.universe_min_conf = StrategyEngine.ENSEMBLE_CONFIDENCE_THRESHOLD * 100
+        if "idea_dry_runs" not in st.session_state:
+            st.session_state.idea_dry_runs = {}
 
     def _on_universe_change(self) -> None:
         """
@@ -321,6 +323,44 @@ class LiveTradingApp:
         if basis:
             st.caption(basis)
 
+    def _idea_cache_key(self, idea: Dict[str, Any], group: str) -> str:
+        symbol = idea.get("symbol", "N/A")
+        strategy = idea.get("suggested_strategy", "Unknown")
+        expiry = idea.get("order_example", {}).get("legs", [{}])[0].get("symbol", "")
+        return f"{group}:{symbol}:{strategy}:{expiry}"
+
+    def _preview_order(self, payload: Dict[str, Any], cache_key: str) -> None:
+        """Send a dry-run request to Tastytrade and store the response."""
+        if not payload:
+            st.warning("No order payload available for preview.")
+            return
+        if not self.api.can_use_tastytrade():
+            st.warning("Authenticate with Tastytrade to preview orders.")
+            return
+        try:
+            preview = self.api.dry_run_order(payload)
+        except Exception as exc:
+            st.error(f"Dry run failed: {exc}")
+            return
+        st.session_state.idea_dry_runs[cache_key] = {
+            "payload": payload,
+            "preview": preview,
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+        }
+        st.success("Sent to Tastytrade as a preview (no execution).")
+
+    def _render_preview_controls(self, idea: Dict[str, Any], group: str) -> None:
+        order_payload = idea.get("order_example")
+        cache_key = self._idea_cache_key(idea, group)
+        disabled = order_payload is None
+        button_label = "Preview in Tastytrade" if not disabled else "No Order Example Available"
+        if st.button(button_label, key=f"preview_{cache_key}", disabled=disabled):
+            self._preview_order(order_payload, cache_key)
+        cached = st.session_state.idea_dry_runs.get(cache_key)
+        if cached:
+            st.caption("Latest Tastytrade dry-run (not executed):")
+            st.json(cached.get("preview"))
+
     # ------------------------------------------------------------------
     # Page renderers
     # ------------------------------------------------------------------
@@ -515,6 +555,7 @@ class LiveTradingApp:
                         st.table(metrics_df)
                     st.caption("Example order structure (edit before use):")
                     st.code(json.dumps(idea["order_example"], indent=2), language="json")
+                    self._render_preview_controls(idea, "live")
         else:
             st.info("No trade ideas generated for the current portfolio.")
 
@@ -565,6 +606,7 @@ class LiveTradingApp:
                         st.table(metrics_df)
                     st.caption("Sample order (validate pricing before trading):")
                     st.code(json.dumps(idea["order_example"], indent=2), language="json")
+                    self._render_preview_controls(idea, "universe")
         else:
             st.info("No proactive opportunities met the edge thresholds this cycle.")
 
