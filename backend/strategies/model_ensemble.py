@@ -89,6 +89,12 @@ class ModelEnsemble:
         self.performance_tracker = {}
         self.calibration_schedule = {}
         self.calibration_cache = {}  # Cache calibrated parameters
+        self.model_usage_stats: Dict[str, int] = {
+            'black_scholes': 0,
+            'merton_jump': 0,
+            'heston': 0,
+            'ml_neural': 0
+        }
 
         # Setup logging
         self.logger = logging.getLogger('ModelEnsemble')
@@ -167,6 +173,9 @@ class ModelEnsemble:
 
                 if ensemble_pred and ensemble_pred.edge_magnitude > 0.02:  # 2% edge minimum
                     predictions.append(ensemble_pred)
+                    self.model_usage_stats[ensemble_pred.best_model] = (
+                        self.model_usage_stats.get(ensemble_pred.best_model, 0) + 1
+                    )
 
             except Exception as e:
                 self.logger.warning(f"Failed to analyze {symbol} option: {e}")
@@ -341,6 +350,14 @@ class ModelEnsemble:
 
         # Determine best performing model for this prediction
         best_model = max(model_predictions, key=lambda p: p.confidence).model_name
+        self.logger.debug(
+            "Prediction breakdown for %s %s@%s -> best=%s (%s models fired)",
+            symbol,
+            option.get('option_type'),
+            option.get('strike'),
+            best_model,
+            [p.model_name for p in model_predictions],
+        )
 
         # Recommend strategy based on edge characteristics and market conditions
         recommended_strategy = self._recommend_strategy(
