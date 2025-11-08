@@ -6,9 +6,16 @@ directly from the authenticated sandbox (or production) account.
 
 from __future__ import annotations
 
+import logging
+import os
 from datetime import datetime, time
 from typing import Any, Dict, List, Optional
 
+import requests
+try:
+    import streamlit as st
+except Exception:  # pragma: no cover - streamlit not needed for tests
+    st = None  # type: ignore
 from config.universe import get_default_universe
 from utils.tastytrade_auth import get_auth_manager
 from utils.strategy_engine import StrategyEngine
@@ -23,9 +30,33 @@ REGULAR_OPEN = time(9, 30)
 REGULAR_CLOSE = time(16, 0)
 
 
+logger = logging.getLogger(__name__)
+
+
+def _get_setting(key: str) -> str:
+    """Resolve configuration from env vars or Streamlit secrets."""
+    value = os.getenv(key)
+    if value:
+        return str(value)
+    if st is not None:
+        secret_value = st.secrets.get(key)  # type: ignore[attr-defined]
+        if secret_value is not None:
+            return str(secret_value)
+    return ""
+
+
+def _resolve_backend_base_url() -> str:
+    for key in ("ENSEMBLE_SERVICE_URL", "TRADING_BOT_API_URL"):
+        candidate = _get_setting(key).strip()
+        if candidate:
+            return candidate.rstrip("/")
+    return ""
+
+
 class TradingBotAPI:
     def __init__(self):
         self.auth_manager = get_auth_manager()
+        self.backend_base_url = _resolve_backend_base_url()
 
     # ------------------------------------------------------------------
     # Session helpers
@@ -185,6 +216,101 @@ class TradingBotAPI:
             return self.auth_manager.get_watchlist_symbols(watchlist_name)
         except Exception:
             return []
+
+    # ------------------------------------------------------------------
+    # Backend persistence helpers
+    # ------------------------------------------------------------------
+
+    def _backend_available(self) -> bool:
+        return bool(self.backend_base_url)
+
+    def fetch_favorites(self) -> List[Dict[str, Any]]:
+        if not self._backend_available() or not self.can_use_tastytrade():
+            return []
+        account = self.get_account_number()
+        try:
+            resp = requests.get(
+                f"{self.backend_base_url}/favorites/{account}",
+                timeout=10,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            return data.get("favorites", [])
+        except requests.RequestException as exc:
+            logger.debug("Failed to fetch favorites: %s", exc)
+            return []
+
+    def save_favorite(self, idea_id: str, idea: Dict[str, Any]) -> bool:
+        if not self._backend_available() or not self.can_use_tastytrade():
+            return False
+        account = self.get_account_number()
+        payload = {
+            "account_number": account,
+            "idea_id": idea_id,
+            "symbol": idea.get("symbol", ""),
+            "strategy": idea.get("suggested_strategy", ""),
+            "snapshot": idea,
+        }
+        try:
+            resp = requests.post(
+                f"{self.backend_base_url}/favorites",
+                json=payload,
+                timeout=10,
+            )
+            resp.raise_for_status()
+            return True
+        except requests.RequestException as exc:
+            logger.debug("Failed to save favorite: %s", exc)
+            return False
+
+    def delete_favorite(self, idea_id: str) -> bool:
+        if not self._backend_available() or not self.can_use_tastytrade():
+            return False
+        account = self.get_account_number()
+        try:
+            resp = requests.delete(
+                f"{self.backend_base_url}/favorites/{account}/{idea_id}",
+                timeout=10,
+            )
+            resp.raise_for_status()
+            return True
+        except requests.RequestException as exc:
+            logger.debug("Failed to delete favorite: %s", exc)
+            return False
+
+    def fetch_chat_history(self, session_id: str) -> List[Dict[str, Any]]:
+        if not self._backend_available() or not self.can_use_tastytrade():
+            return []
+        account = self.get_account_number()
+        try:
+            resp = requests.get(
+                f"{self.backend_base_url}/chat/logs/{account}/{session_id}",
+                timeout=10,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            return data.get("messages", [])
+        except requests.RequestException as exc:
+            logger.debug("Failed to fetch chat history: %s", exc)
+            return []
+
+    def log_chat_message(self, session_id: str, role: str, content: str) -> None:
+        if not self._backend_available() or not self.can_use_tastytrade():
+            return
+        account = self.get_account_number()
+        try:
+            requests.post(
+                f"{self.backend_base_url}/chat/logs",
+                json={
+                    "account_number": account,
+                    "session_id": session_id,
+                    "role": role,
+                    "content": content,
+                },
+                timeout=10,
+            ).raise_for_status()
+        except requests.RequestException as exc:
+            logger.debug("Failed to log chat message: %s", exc)
 
     # ------------------------------------------------------------------
     # Utility

@@ -124,3 +124,32 @@ class MarketDataResponse(BaseModel):
     option_chains: Dict[str, List[Dict[str, Any]]]
     market_data: Dict[str, Dict[str, List[float]]]
     underlying_prices: Dict[str, float]
+
+
+class FavoritePayload(BaseModel):
+    account_number: str
+    idea_id: str
+    symbol: str
+    strategy: str
+    snapshot: Dict[str, Any]
+
+
+class FavoriteListResponse(BaseModel):
+    favorites: List[FavoritePayload]
+
+
+class ChatLogEntry(BaseModel):
+    account_number: str
+    session_id: str
+    role: Literal["user", "assistant"]
+    content: str
+    created_at: Optional[str] = None
+
+
+class ChatHistoryResponse(BaseModel):
+    messages: List[ChatLogEntry]
+
+
+class JeffreySettingsPayload(BaseModel):
+    account_number: str
+    settings: Dict[str, Any]

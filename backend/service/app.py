@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 from datetime import datetime
@@ -11,10 +12,25 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
 from .market_data import MarketDataService
+from .repository import (
+    delete_favorite,
+    get_chat_history,
+    get_settings,
+    list_favorites,
+    log_chat_message,
+    save_favorite,
+    upsert_settings,
+)
+from .db import init_db
 from .schemas import (
     EnsembleIdea,
+    FavoriteListResponse,
+    FavoritePayload,
     MarketDataRequest,
     MarketDataResponse,
+    ChatLogEntry,
+    ChatHistoryResponse,
+    JeffreySettingsPayload,
     UniverseScanRequest,
     UniverseScanResponse,
 )
@@ -40,7 +56,7 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
-    state: dict[str, Optional[object]] = {"scanner": None, "market_service": None}
+    state: dict[str, Optional[object]] = {"scanner": None, "market_service": None, "db_ready": None}
 
     @app.on_event("startup")
     async def startup_event() -> None:
@@ -52,6 +68,13 @@ def create_app() -> FastAPI:
             state["market_service"] = MarketDataService()
         except RuntimeError as exc:
             logger.warning("MarketDataService unavailable: %s", exc)
+        try:
+            state["db_ready"] = init_db()
+            if not state["db_ready"]:
+                logger.warning("Favorites DB not configured.")
+        except Exception as exc:
+            state["db_ready"] = False
+            logger.warning("Failed to initialize database: %s", exc)
 
     @app.get("/")
     async def root() -> dict[str, object]:
@@ -114,3 +137,87 @@ def create_app() -> FastAPI:
 
     return app
 app = create_app()
+
+
+# ----------------------------------------------------------------------
+# Favorites endpoints
+# ----------------------------------------------------------------------
+
+@app.get("/favorites/{account_number}", response_model=FavoriteListResponse)
+async def favorites_list(account_number: str) -> FavoriteListResponse:
+    loop = asyncio.get_running_loop()
+    try:
+        favorites = await loop.run_in_executor(None, lambda: list_favorites(account_number))
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    return FavoriteListResponse(favorites=favorites)
+
+
+@app.post("/favorites", response_model=FavoritePayload)
+async def favorites_save(payload: FavoritePayload) -> FavoritePayload:
+    loop = asyncio.get_running_loop()
+    try:
+        saved = await loop.run_in_executor(None, lambda: save_favorite(payload.dict()))
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    return FavoritePayload(**saved)
+
+
+@app.delete("/favorites/{account_number}/{idea_id}")
+async def favorites_delete(account_number: str, idea_id: str) -> dict[str, str]:
+    loop = asyncio.get_running_loop()
+    try:
+        await loop.run_in_executor(None, lambda: delete_favorite(account_number, idea_id))
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    return {"status": "deleted"}
+
+
+# ----------------------------------------------------------------------
+# Chat log endpoints
+# ----------------------------------------------------------------------
+
+@app.post("/chat/logs")
+async def chat_log(payload: ChatLogEntry) -> dict[str, str]:
+    loop = asyncio.get_running_loop()
+    try:
+        await loop.run_in_executor(None, lambda: log_chat_message(payload.dict()))
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    return {"status": "logged"}
+
+
+@app.get("/chat/logs/{account_number}/{session_id}", response_model=ChatHistoryResponse)
+async def chat_history(account_number: str, session_id: str) -> ChatHistoryResponse:
+    loop = asyncio.get_running_loop()
+    try:
+        messages = await loop.run_in_executor(None, lambda: get_chat_history(account_number, session_id))
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    return ChatHistoryResponse(messages=messages)
+
+
+# ----------------------------------------------------------------------
+# Jeffrey settings
+# ----------------------------------------------------------------------
+
+@app.get("/settings/{account_number}", response_model=JeffreySettingsPayload)
+async def get_user_settings(account_number: str) -> JeffreySettingsPayload:
+    loop = asyncio.get_running_loop()
+    try:
+        settings = await loop.run_in_executor(None, lambda: get_settings(account_number))
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    return JeffreySettingsPayload(**settings)
+
+
+@app.put("/settings/{account_number}", response_model=JeffreySettingsPayload)
+async def update_user_settings(account_number: str, payload: JeffreySettingsPayload) -> JeffreySettingsPayload:
+    loop = asyncio.get_running_loop()
+    try:
+        updated = await loop.run_in_executor(
+            None, lambda: upsert_settings(account_number, payload.settings)
+        )
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    return JeffreySettingsPayload(**updated)

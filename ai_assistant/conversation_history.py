@@ -65,3 +65,7 @@ class ConversationHistory:
     def last_query_type(self, session_id: str) -> Optional[str]:
         session = self.get(session_id)
         return session.last_query_type()
+
+    def set_messages(self, session_id: str, messages: List[Dict[str, str]]) -> None:
+        session = self.get(session_id)
+        session.messages = [Message(**msg) for msg in messages]

@@ -125,8 +125,8 @@ class LiveTradingApp:
             st.session_state.universe_min_conf = StrategyEngine.ENSEMBLE_CONFIDENCE_THRESHOLD * 100
         if "idea_dry_runs" not in st.session_state:
             st.session_state.idea_dry_runs = {}
-        if "favorite_ideas" not in st.session_state:
-            st.session_state.favorite_ideas = {}
+        if "favorite_cache" not in st.session_state:
+            st.session_state.favorite_cache = {"loaded": False, "items": []}
 
     def _on_universe_change(self) -> None:
         """
@@ -343,8 +343,23 @@ class LiveTradingApp:
     def _favorite_key(self, idea: Dict[str, Any]) -> str:
         return f"{idea.get('symbol')}::{idea.get('suggested_strategy')}::{idea.get('trade_idea')}"
 
-    def _favorites(self) -> Dict[str, Dict[str, Any]]:
-        return st.session_state.favorite_ideas
+    def _ensure_favorites_loaded(self) -> None:
+        cache = st.session_state.favorite_cache
+        if cache.get("loaded"):
+            return
+        if not self.api.can_use_tastytrade():
+            cache["items"] = []
+            cache["loaded"] = True
+            return
+        cache["items"] = self.api.fetch_favorites()
+        cache["loaded"] = True
+
+    def _favorite_items(self) -> List[Dict[str, Any]]:
+        return st.session_state.favorite_cache.get("items", [])
+
+    def _reload_favorites(self) -> None:
+        st.session_state.favorite_cache["loaded"] = False
+        self._ensure_favorites_loaded()
 
     def _preview_order(self, payload: Dict[str, Any], cache_key: str) -> None:
         """Send a dry-run request to Tastytrade and store the response."""
@@ -395,32 +410,39 @@ class LiveTradingApp:
         return "★" * stars + "☆" * (5 - stars)
 
     def _render_favorite_button(self, idea: Dict[str, Any], key_suffix: str) -> None:
+        self._ensure_favorites_loaded()
         fav_key = self._favorite_key(idea)
-        favorites = self._favorites()
-        if fav_key in favorites:
+        items = self._favorite_items()
+        exists = any(entry.get("idea_id") == fav_key for entry in items)
+        if exists:
             if st.button("★ Remove Favorite", key=f"fav_remove_{key_suffix}"):
-                favorites.pop(fav_key, None)
-                st.session_state.favorite_ideas = favorites
+                if self.api.delete_favorite(fav_key):
+                    self._reload_favorites()
                 st.rerun()
         else:
             if st.button("☆ Save as Favorite", key=f"fav_save_{key_suffix}"):
-                favorites[fav_key] = idea
-                st.session_state.favorite_ideas = favorites
-                st.success("Saved to favorites.")
+                saved = self.api.save_favorite(fav_key, idea)
+                if saved:
+                    self._reload_favorites()
+                    st.success("Saved to favorites.")
+                else:
+                    st.warning("Favorites service unavailable.")
 
     def _render_favorites_section(self) -> None:
-        favorites = list(self._favorites().values())
+        self._ensure_favorites_loaded()
+        favorites = self._favorite_items()
         st.markdown("### ⭐️ Saved Favorite Ideas")
         if not favorites:
             st.info("No favorites saved yet. Use the ☆ button on any idea to pin it here.")
             return
         for fav in favorites:
-            stars = self._star_badge(self._compute_star_rating(fav))
-            with st.expander(f"{fav.get('symbol')} — {fav.get('suggested_strategy')} {stars}", expanded=False):
-                st.write(f"**Signal:** {fav.get('signal')}")
-                st.write(fav.get("rationale"))
-                st.write(fav.get("trade_idea"))
-                metrics = fav.get("metrics", {})
+            idea = fav.get("snapshot", {})
+            stars = self._star_badge(self._compute_star_rating(idea))
+            with st.expander(f"{idea.get('symbol')} — {idea.get('suggested_strategy')} {stars}", expanded=False):
+                st.write(f"**Signal:** {idea.get('signal')}")
+                st.write(idea.get("rationale"))
+                st.write(idea.get("trade_idea"))
+                metrics = idea.get("metrics", {})
                 if metrics:
                     metrics_df = pd.DataFrame(
                         [{"Metric": k.replace('_', ' ').title(), "Value": v} for k, v in metrics.items()]
