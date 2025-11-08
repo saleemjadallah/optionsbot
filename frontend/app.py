@@ -416,17 +416,26 @@ class LiveTradingApp:
         exists = any(entry.get("idea_id") == fav_key for entry in items)
         if exists:
             if st.button("★ Remove Favorite", key=f"fav_remove_{key_suffix}"):
-                if self.api.delete_favorite(fav_key):
-                    self._reload_favorites()
-                st.rerun()
+                try:
+                    removed = self.api.delete_favorite(fav_key)
+                except RuntimeError as exc:
+                    st.error(f"Failed to remove favorite: {exc}")
+                else:
+                    if removed:
+                        self._reload_favorites()
+                    st.rerun()
         else:
             if st.button("☆ Save as Favorite", key=f"fav_save_{key_suffix}"):
-                saved = self.api.save_favorite(fav_key, idea)
-                if saved:
-                    self._reload_favorites()
-                    st.success("Saved to favorites.")
+                try:
+                    saved = self.api.save_favorite(fav_key, idea)
+                except RuntimeError as exc:
+                    st.error(f"Failed to save favorite: {exc}")
                 else:
-                    st.warning("Favorites service unavailable.")
+                    if saved:
+                        self._reload_favorites()
+                        st.success("Saved to favorites.")
+                    else:
+                        st.warning("Favorites service unavailable.")
 
     def _render_favorites_section(self) -> None:
         self._ensure_favorites_loaded()

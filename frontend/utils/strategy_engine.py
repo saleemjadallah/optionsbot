@@ -9,6 +9,7 @@ import logging
 import math
 import os
 import sys
+import time
 from dataclasses import dataclass, asdict
 from datetime import date
 from decimal import Decimal
@@ -85,6 +86,7 @@ class StrategyEngine:
     UNIVERSE_MAX_OPTIONS = 120
     ENSEMBLE_EDGE_THRESHOLD = 0.02
     ENSEMBLE_CONFIDENCE_THRESHOLD = 0.4
+    REQUEST_INTERVAL = float(os.getenv("TASTYTRADE_REQUEST_INTERVAL", "0.25"))
 
     def __init__(self, auth_manager: TastytradeAuthManager):
         self.auth = auth_manager
@@ -95,6 +97,7 @@ class StrategyEngine:
         self.logger = logging.getLogger(__name__)
         self.ensemble_service_url = (os.getenv("ENSEMBLE_SERVICE_URL") or "").strip()
         self.ensemble_risk_level = os.getenv("ENSEMBLE_RISK_LEVEL", "moderate")
+        self._last_request_time: Dict[str, float] = {}
 
     # ------------------------------------------------------------------
     # Public API
@@ -1358,7 +1361,23 @@ class StrategyEngine:
         return chain
 
     def _get_market_data(self, symbol: str, instrument_type: InstrumentType) -> MarketData:
-        return get_market_data(self.session, symbol, instrument_type)
+        key = f"{instrument_type.value}:{symbol.upper()}"
+        self._respect_rate_limit(key)
+        quote = get_market_data(self.session, symbol, instrument_type)
+        self._last_request_time[key] = time.monotonic()
+        return quote
+
+    def _respect_rate_limit(self, key: str) -> None:
+
+        interval = max(0.0, self.REQUEST_INTERVAL)
+        if interval == 0.0:
+            return
+        last = self._last_request_time.get(key)
+        if last is None:
+            return
+        elapsed = time.monotonic() - last
+        if elapsed < interval:
+            time.sleep(interval - elapsed)
 
     @staticmethod
     def _market_price(data: MarketData) -> float:

@@ -306,8 +306,9 @@ class TradingBotAPI:
             resp.raise_for_status()
             return True
         except requests.RequestException as exc:
-            logger.debug("Failed to save favorite: %s", exc)
-            return False
+            detail = self._http_error_detail(exc)
+            logger.warning("Failed to save favorite: %s", detail)
+            raise RuntimeError(detail) from exc
 
     def delete_favorite(self, idea_id: str) -> bool:
         if not self._backend_available() or not self.can_use_tastytrade():
@@ -321,8 +322,9 @@ class TradingBotAPI:
             resp.raise_for_status()
             return True
         except requests.RequestException as exc:
-            logger.debug("Failed to delete favorite: %s", exc)
-            return False
+            detail = self._http_error_detail(exc)
+            logger.warning("Failed to delete favorite: %s", detail)
+            raise RuntimeError(detail) from exc
 
     def fetch_chat_history(self, session_id: str) -> List[Dict[str, Any]]:
         if not self._backend_available() or not self.can_use_tastytrade():
@@ -433,3 +435,20 @@ class TradingBotAPI:
             "description": txn.get("description"),
             "executed_at": executed_at,
         }
+
+    @staticmethod
+    def _http_error_detail(exc: requests.RequestException) -> str:
+        response = getattr(exc, "response", None)
+        if response is None:
+            return str(exc)
+        try:
+            payload = response.json()
+        except ValueError:
+            return response.text or str(exc)
+        detail = (
+            payload.get("detail")
+            or payload.get("message")
+            or payload.get("error")
+            or payload
+        )
+        return str(detail)
