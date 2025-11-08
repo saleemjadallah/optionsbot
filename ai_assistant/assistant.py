@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass
-from typing import Dict, Optional, List
+from typing import Any, Dict, Optional, List
 
 from ai_assistant.context_manager import TradingContextManager
 from ai_assistant.conversation_history import ConversationHistory
@@ -145,11 +145,40 @@ class JeffreyAssistant:
             return f"{answer}{formatted_sources}"
 
         if model_key == "openai":
-            payload = messages
+            payload = list(messages or [])
+            context_text = self._summarize_context_snapshot(context_snapshot)
+            system_with_context = system_prompt
+            if context_text:
+                system_with_context = f"{system_prompt}\n\nCurrent Context:\n{context_text}"
             if not payload or payload[0].get("role") != "system":
-                payload = [{"role": "system", "content": system_prompt}] + payload
+                payload = [{"role": "system", "content": system_with_context}] + payload
+            else:
+                payload[0] = dict(payload[0])
+                payload[0]["content"] = system_with_context
             result = await client.chat(messages=payload)
             content = result.get("content") or "No response received."
             return content.strip()
 
         return "This query type is not supported yet."
+
+    @staticmethod
+    def _summarize_context_snapshot(context: Dict[str, Any]) -> str:
+        if not context:
+            return ""
+        lines: List[str] = [
+            f"Portfolio Value: ${context.get('portfolio_value', 0):,.2f}",
+            f"Available Capital: ${context.get('available_capital', 0):,.2f}",
+            f"Positions: {context.get('position_count', 0)}",
+            f"Daily P&L: ${context.get('daily_pnl', 0):,.2f}",
+            f"Delta: {context.get('delta', 0):.2f}",
+            f"Gamma: {context.get('gamma', 0):,.4f}",
+            f"Theta: {context.get('theta', 0):,.2f}",
+            f"Vega: {context.get('vega', 0):,.2f}",
+        ]
+        trade_digest = context.get("recent_trade_digest")
+        if trade_digest:
+            lines.append(f"Recent Trades: {trade_digest}")
+        favorites_digest = context.get("favorite_strategy_digest")
+        if favorites_digest:
+            lines.append(f"Saved Strategies: {favorites_digest}")
+        return "\n".join(lines)

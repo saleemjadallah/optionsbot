@@ -376,6 +376,51 @@ class TastytradeAuthManager:
         data = response.json().get("data", {})
         return data.get("items") or data.get("positions") or []
 
+    def get_account_transactions(
+        self,
+        account_number: Optional[str] = None,
+        per_page: int = 250,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        types: Optional[List[str]] = None,
+        symbol: Optional[str] = None,
+    ) -> List[Dict[str, Any]]:
+        """Return recent transactions (trades, dividends, fees, etc.) for the account."""
+        account_num = account_number or self._get_session_info().get("account_number")
+        if not account_num:
+            account_num = self.ensure_account()
+
+        page_limit = max(1, min(per_page, 2000))
+        params: Dict[str, Any] = {
+            "per-page": page_limit,
+            "page-offset": 0,
+            "sort": "desc",
+        }
+        if start_date:
+            params["start-date"] = start_date
+        if end_date:
+            params["end-date"] = end_date
+        if symbol:
+            params["symbol"] = symbol
+        if types:
+            params["types"] = types
+
+        url = f"{self.base_url}/accounts/{account_num}/transactions"
+
+        try:
+            response = requests.get(
+                url,
+                headers=self._get_headers(),
+                params=params,
+                timeout=15,
+            )
+            response.raise_for_status()
+        except requests.exceptions.RequestException as exc:
+            raise Exception(f"Failed to fetch account transactions: {exc}") from exc
+
+        data = response.json().get("data", {})
+        return data.get("items") or data.get("transactions") or []
+
     def get_watchlists(self) -> List[Dict[str, Any]]:
         """Return the user's private watchlists."""
         url = f"{self.base_url}/watchlists"

@@ -61,8 +61,26 @@ class PerplexityClient:
     def _build_system_prompt(base: str, context: Optional[Dict[str, Any]]) -> str:
         if not context:
             return base
-        latest = context.get("universe_ideas", [])[:3]
-        highlight = "\n".join(
-            f"- {idea.get('symbol')}: {idea.get('suggested_strategy')}" for idea in latest
-        )
-        return f"{base}\nFocus tickers:\n{highlight}"
+
+        sections = [base]
+
+        universe = context.get("universe_ideas", [])[:3]
+        if universe:
+            highlight = "\n".join(
+                f"- {idea.get('symbol')}: {idea.get('suggested_strategy')}" for idea in universe
+            )
+            sections.append(f"Focus tickers:\n{highlight}")
+
+        favorites = context.get("favorite_strategies") or []
+        if favorites:
+            fav_lines = "\n".join(
+                f"- {entry.get('symbol')}: {entry.get('strategy')} ({entry.get('signal') or 'saved idea'})"
+                for entry in favorites[:3]
+            )
+            sections.append(f"Saved strategies:\n{fav_lines}")
+
+        trade_digest = context.get("recent_trade_digest")
+        if trade_digest:
+            sections.append(f"Recent trades to reference: {trade_digest}")
+
+        return "\n\n".join(sections)

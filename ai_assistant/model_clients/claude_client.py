@@ -65,4 +65,10 @@ class ClaudeClient:
             f"Theta: {context.get('theta', 0):.2f}",
             f"Vega: {context.get('vega', 0):.2f}",
         ]
+        trade_digest = context.get("recent_trade_digest")
+        if trade_digest:
+            context_lines.append(f"Recent Trades: {trade_digest}")
+        favorites_digest = context.get("favorite_strategy_digest")
+        if favorites_digest:
+            context_lines.append(f"Pinned Strategies: {favorites_digest}")
         return f"{prompt}\n\nCurrent Context:\n" + "\n".join(context_lines)

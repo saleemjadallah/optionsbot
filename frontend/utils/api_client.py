@@ -201,6 +201,52 @@ class TradingBotAPI:
         scout_ideas = context.get("universe_ideas", [])
         return live_ideas + scout_ideas
 
+    def get_recent_trades(self, limit: int = 10) -> List[Dict[str, Any]]:
+        """Return the most recent live trades from the Tastytrade transaction feed."""
+        if limit <= 0 or not self.can_use_tastytrade():
+            return []
+
+        account = self.get_account_number()
+        try:
+            transactions = self.auth_manager.get_account_transactions(
+                account_number=account,
+                per_page=max(limit * 2, limit),
+                types=["Trade"],
+            )
+        except Exception as exc:
+            logger.debug("Failed to fetch recent trades: %s", exc)
+            return []
+
+        trades: List[Dict[str, Any]] = []
+        for txn in transactions:
+            normalized = self._normalize_trade(txn)
+            if not normalized:
+                continue
+            trades.append(normalized)
+            if len(trades) >= limit:
+                break
+        return trades
+
+    def get_saved_strategies(self, limit: int = 5) -> List[Dict[str, Any]]:
+        """Return a lightweight view of saved favorites for quick context injection."""
+        favorites = self.fetch_favorites()
+        summaries: List[Dict[str, Any]] = []
+        for fav in favorites:
+            snapshot = fav.get("snapshot", {}) if isinstance(fav, dict) else {}
+            summaries.append(
+                {
+                    "idea_id": fav.get("idea_id"),
+                    "symbol": snapshot.get("symbol") or fav.get("symbol"),
+                    "strategy": snapshot.get("suggested_strategy") or fav.get("strategy"),
+                    "signal": snapshot.get("signal"),
+                    "edge": (snapshot.get("metrics") or {}).get("edge_pct"),
+                    "notes": snapshot.get("trade_idea") or snapshot.get("rationale"),
+                }
+            )
+            if len(summaries) >= limit:
+                break
+        return summaries
+
     def dry_run_order(self, order: Dict) -> Dict:
         self._require_session()
         return self.auth_manager.dry_run_order(order)
@@ -341,3 +387,49 @@ class TradingBotAPI:
             return float(value)
         except (TypeError, ValueError):
             return 0.0
+
+    def _normalize_trade(self, txn: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """Condense a raw Tastytrade transaction into the fields Jeffrey needs."""
+        txn_type = str(
+            txn.get("transaction-type") or txn.get("type") or ""
+        ).strip().lower()
+        if txn_type != "trade":
+            return None
+
+        symbol = (
+            txn.get("symbol")
+            or txn.get("underlying-symbol")
+            or txn.get("underlying_symbol")
+        )
+        action = txn.get("action") or txn.get("transaction-sub-type")
+        quantity = self._safe_float(txn.get("quantity"))
+        price = self._safe_float(txn.get("price"))
+        value = self._safe_float(txn.get("value"))
+        realized = (
+            txn.get("realized-pl")
+            or txn.get("realized-pnl")
+            or txn.get("realized-gain-loss")
+            or txn.get("realized-gain")
+            or txn.get("realized-loss")
+            or 0.0
+        )
+        fees = (
+            self._safe_float(txn.get("commission"))
+            + self._safe_float(txn.get("clearing-fees"))
+            + self._safe_float(txn.get("regulatory-fees"))
+            + self._safe_float(txn.get("other-fees"))
+        )
+        executed_at = txn.get("executed-at") or txn.get("transaction-date")
+
+        return {
+            "symbol": symbol,
+            "action": action,
+            "quantity": quantity,
+            "price": price,
+            "value": value,
+            "realized_pnl": self._safe_float(realized),
+            "fees": fees,
+            "instrument_type": txn.get("instrument-type"),
+            "description": txn.get("description"),
+            "executed_at": executed_at,
+        }
