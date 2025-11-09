@@ -12,7 +12,8 @@ from .app import create_app
 def run() -> None:
     """Launch the FastAPI application with uvicorn."""
     host = os.getenv("SERVICE_HOST", "0.0.0.0")
-    port = int(os.getenv("SERVICE_PORT", "8000"))
+    port_value = os.getenv("SERVICE_PORT") or os.getenv("PORT") or "8000"
+    port = int(port_value)
     reload = os.getenv("SERVICE_RELOAD", "false").lower() in {"1", "true", "yes"}
 
     uvicorn.run(

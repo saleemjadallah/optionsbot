@@ -1,7 +1,8 @@
 """
 Thin client that pulls live data from the Tastytrade session used by the
-Streamlit frontend. No mock data or backend fallbacks – everything flows
-directly from the authenticated sandbox (or production) account.
+Streamlit frontend. Most flows rely directly on the authenticated sandbox
+(or production) account, with a light local cache for favorites when the
+backend persistence layer is unavailable.
 """
 
 from __future__ import annotations
@@ -17,8 +18,9 @@ try:
 except Exception:  # pragma: no cover - streamlit not needed for tests
     st = None  # type: ignore
 from config.universe import get_default_universe
-from utils.tastytrade_auth import get_auth_manager
+from utils.favorites_store import LocalFavoriteStore
 from utils.strategy_engine import StrategyEngine
+from utils.tastytrade_auth import get_auth_manager
 
 try:  # pragma: no cover - zoneinfo availability depends on python version
     from zoneinfo import ZoneInfo
@@ -57,6 +59,7 @@ class TradingBotAPI:
     def __init__(self):
         self.auth_manager = get_auth_manager()
         self.backend_base_url = _resolve_backend_base_url()
+        self.local_favorites = LocalFavoriteStore()
 
     # ------------------------------------------------------------------
     # Session helpers
@@ -271,23 +274,27 @@ class TradingBotAPI:
         return bool(self.backend_base_url)
 
     def fetch_favorites(self) -> List[Dict[str, Any]]:
-        if not self._backend_available() or not self.can_use_tastytrade():
+        if not self.can_use_tastytrade():
             return []
         account = self.get_account_number()
-        try:
-            resp = requests.get(
-                f"{self.backend_base_url}/favorites/{account}",
-                timeout=10,
-            )
-            resp.raise_for_status()
-            data = resp.json()
-            return data.get("favorites", [])
-        except requests.RequestException as exc:
-            logger.debug("Failed to fetch favorites: %s", exc)
-            return []
+        if self._backend_available():
+            try:
+                resp = requests.get(
+                    f"{self.backend_base_url}/favorites/{account}",
+                    timeout=10,
+                )
+                resp.raise_for_status()
+                data = resp.json()
+                favorites = data.get("favorites", [])
+                if isinstance(favorites, list):
+                    self.local_favorites.replace_all(account, favorites)
+                    return favorites
+            except requests.RequestException as exc:
+                logger.debug("Failed to fetch favorites from backend: %s", exc)
+        return self.local_favorites.list(account)
 
     def save_favorite(self, idea_id: str, idea: Dict[str, Any]) -> bool:
-        if not self._backend_available() or not self.can_use_tastytrade():
+        if not self.can_use_tastytrade():
             return False
         account = self.get_account_number()
         payload = {
@@ -297,34 +304,45 @@ class TradingBotAPI:
             "strategy": idea.get("suggested_strategy", ""),
             "snapshot": idea,
         }
-        try:
-            resp = requests.post(
-                f"{self.backend_base_url}/favorites",
-                json=payload,
-                timeout=10,
-            )
-            resp.raise_for_status()
-            return True
-        except requests.RequestException as exc:
-            detail = self._http_error_detail(exc)
-            logger.warning("Failed to save favorite: %s", detail)
-            raise RuntimeError(detail) from exc
+        if self._backend_available():
+            try:
+                resp = requests.post(
+                    f"{self.backend_base_url}/favorites",
+                    json=payload,
+                    timeout=10,
+                )
+                resp.raise_for_status()
+                self.local_favorites.save(account, payload)
+                return True
+            except requests.RequestException as exc:
+                if not self._should_fallback_to_local(exc):
+                    detail = self._http_error_detail(exc)
+                    logger.warning("Failed to save favorite: %s", detail)
+                    raise RuntimeError(detail) from exc
+                logger.warning("Favorites backend unavailable, saving locally: %s", exc)
+        self.local_favorites.save(account, payload)
+        return True
 
     def delete_favorite(self, idea_id: str) -> bool:
-        if not self._backend_available() or not self.can_use_tastytrade():
+        if not self.can_use_tastytrade():
             return False
         account = self.get_account_number()
-        try:
-            resp = requests.delete(
-                f"{self.backend_base_url}/favorites/{account}/{idea_id}",
-                timeout=10,
-            )
-            resp.raise_for_status()
-            return True
-        except requests.RequestException as exc:
-            detail = self._http_error_detail(exc)
-            logger.warning("Failed to delete favorite: %s", detail)
-            raise RuntimeError(detail) from exc
+        if self._backend_available():
+            try:
+                resp = requests.delete(
+                    f"{self.backend_base_url}/favorites/{account}/{idea_id}",
+                    timeout=10,
+                )
+                resp.raise_for_status()
+                self.local_favorites.delete(account, idea_id)
+                return True
+            except requests.RequestException as exc:
+                if not self._should_fallback_to_local(exc):
+                    detail = self._http_error_detail(exc)
+                    logger.warning("Failed to delete favorite: %s", detail)
+                    raise RuntimeError(detail) from exc
+                logger.warning("Favorites backend unavailable, deleting locally: %s", exc)
+        return self.local_favorites.delete(account, idea_id)
 
     def fetch_chat_history(self, session_id: str) -> List[Dict[str, Any]]:
         if not self._backend_available() or not self.can_use_tastytrade():
@@ -452,3 +470,10 @@ class TradingBotAPI:
             or payload
         )
         return str(detail)
+
+    @staticmethod
+    def _should_fallback_to_local(exc: requests.RequestException) -> bool:
+        response = getattr(exc, "response", None)
+        if response is None:
+            return True
+        return int(getattr(response, "status_code", 0)) >= 500
