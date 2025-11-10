@@ -314,6 +314,7 @@ class ModelEnsemble:
         consensus_price = 0
         prices = []
         weight_breakdown = {}  # DEBUG: Track weight contributions
+        model_contributions = {}  # Track each model's contribution for best model selection
 
         for pred in model_predictions:
             # Dynamic weight based on model fitness and confidence
@@ -325,6 +326,9 @@ class ModelEnsemble:
             regime_weight = self._get_regime_weight(pred.model_name, regime)
 
             final_weight = base_weight * fitness_weight * confidence_weight * regime_weight
+
+            # Track contribution for best model selection
+            model_contributions[pred.model_name] = final_weight
 
             # DEBUG: Store weight breakdown
             weight_breakdown[pred.model_name] = {
@@ -358,19 +362,28 @@ class ModelEnsemble:
         disagreement_penalty = max(0, 1 - model_disagreement * 2)  # Penalty for disagreement
         confidence_score = avg_confidence * disagreement_penalty
 
-        # Determine best performing model for this prediction
-        best_model = max(model_predictions, key=lambda p: p.confidence).model_name
+        # Determine best model by contribution to consensus (not just confidence)
+        # This ensures we credit the model that actually drove the prediction.
+        # Previously selected by max(confidence), which caused Heston to dominate
+        # since it can reach 0.95 confidence. Now we pick by actual influence on
+        # the consensus price, creating proper attribution for performance tracking.
+        best_model = max(model_contributions.items(), key=lambda x: x[1])[0]
 
-        # DEBUG: Log all model confidences and weights to investigate Heston dominance
+        # DEBUG: Log all model confidences and weights to investigate diversity
         confidence_breakdown = {p.model_name: f"{p.confidence:.3f}" for p in model_predictions}
+        contribution_pct = {
+            name: f"{(contrib/total_weight*100):.1f}%"
+            for name, contrib in model_contributions.items()
+        }
         self.logger.info(
-            "🔍 ENSEMBLE DEBUG for %s %s@%s -> best_model=%s | Confidences: %s | Weights: %s",
+            "🔍 ENSEMBLE DEBUG for %s %s@%s -> best_model=%s (by contribution) | "
+            "Confidences: %s | Contributions: %s",
             symbol,
             option.get('option_type'),
             option.get('strike'),
             best_model,
             confidence_breakdown,
-            weight_breakdown,
+            contribution_pct,
         )
 
         # Recommend strategy based on edge characteristics and market conditions
