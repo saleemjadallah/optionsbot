@@ -313,6 +313,7 @@ class ModelEnsemble:
         total_weight = 0
         consensus_price = 0
         prices = []
+        weight_breakdown = {}  # DEBUG: Track weight contributions
 
         for pred in model_predictions:
             # Dynamic weight based on model fitness and confidence
@@ -324,6 +325,15 @@ class ModelEnsemble:
             regime_weight = self._get_regime_weight(pred.model_name, regime)
 
             final_weight = base_weight * fitness_weight * confidence_weight * regime_weight
+
+            # DEBUG: Store weight breakdown
+            weight_breakdown[pred.model_name] = {
+                'base': f"{base_weight:.3f}",
+                'fitness': f"{fitness_weight:.3f}",
+                'conf': f"{confidence_weight:.3f}",
+                'regime': f"{regime_weight:.3f}",
+                'final': f"{final_weight:.3f}"
+            }
 
             consensus_price += pred.predicted_price * final_weight
             total_weight += final_weight
@@ -350,13 +360,17 @@ class ModelEnsemble:
 
         # Determine best performing model for this prediction
         best_model = max(model_predictions, key=lambda p: p.confidence).model_name
-        self.logger.debug(
-            "Prediction breakdown for %s %s@%s -> best=%s (%s models fired)",
+
+        # DEBUG: Log all model confidences and weights to investigate Heston dominance
+        confidence_breakdown = {p.model_name: f"{p.confidence:.3f}" for p in model_predictions}
+        self.logger.info(
+            "🔍 ENSEMBLE DEBUG for %s %s@%s -> best_model=%s | Confidences: %s | Weights: %s",
             symbol,
             option.get('option_type'),
             option.get('strike'),
             best_model,
-            [p.model_name for p in model_predictions],
+            confidence_breakdown,
+            weight_breakdown,
         )
 
         # Recommend strategy based on edge characteristics and market conditions
