@@ -81,10 +81,10 @@ class ModelEnsemble:
         self.risk_level = risk_level
         self.models = self._initialize_models()
         self.model_weights = {
-            'black_scholes': 0.2,
-            'merton_jump': 0.25,
-            'heston': 0.3,
-            'ml_neural': 0.25
+            'black_scholes': 0.25,
+            'merton_jump': 0.35,
+            'heston': 0.4,
+            # 'ml_neural': 0.25  # Disabled
         }
         self.performance_tracker = {}
         self.calibration_schedule = {}
@@ -93,7 +93,7 @@ class ModelEnsemble:
             'black_scholes': 0,
             'merton_jump': 0,
             'heston': 0,
-            'ml_neural': 0
+            # 'ml_neural': 0  # Disabled
         }
 
         # Setup logging
@@ -110,7 +110,7 @@ class ModelEnsemble:
             'black_scholes': BlackScholesModel(),
             'merton_jump': MertonJumpDiffusion(max_iterations=40),
             'heston': HestonModel(),
-            'ml_neural': MLOptionsPricer()
+            # 'ml_neural': MLOptionsPricer()  # Disabled - model not trained yet
         }
 
     async def analyze_universe(self, option_chains: Dict[str, pd.DataFrame],
@@ -525,25 +525,25 @@ class ModelEnsemble:
                 'black_scholes': 1.2,    # BS works well in calm markets
                 'merton_jump': 0.8,      # Jump models less important
                 'heston': 1.0,
-                'ml_neural': 1.1         # ML good at pattern recognition
+                # 'ml_neural': 1.1         # ML good at pattern recognition (Disabled)
             },
             MarketRegime.VOLATILE: {
                 'black_scholes': 0.7,    # BS underperforms in volatile markets
                 'merton_jump': 1.3,      # Jump models shine
                 'heston': 1.2,           # Stochastic vol important
-                'ml_neural': 0.9
+                # 'ml_neural': 0.9  # Disabled
             },
             MarketRegime.TRENDING: {
                 'black_scholes': 0.9,
                 'merton_jump': 1.1,
                 'heston': 1.0,
-                'ml_neural': 1.2         # ML good at trend recognition
+                # 'ml_neural': 1.2         # ML good at trend recognition (Disabled)
             },
             MarketRegime.CRISIS: {
                 'black_scholes': 0.5,    # BS breaks down in crisis
                 'merton_jump': 1.5,      # Jumps very important
                 'heston': 1.1,
-                'ml_neural': 0.8         # ML may not have crisis training data
+                # 'ml_neural': 0.8         # ML may not have crisis training data (Disabled)
             }
         }
 
@@ -670,7 +670,7 @@ class ModelEnsemble:
             'black_scholes': 0.7,
             'merton_jump': 0.8,
             'heston': 0.75,
-            'ml_neural': 0.85
+            # 'ml_neural': 0.85  # Disabled
         }
 
     def _calculate_time_to_expiry(self, expiration_date: str) -> float:
