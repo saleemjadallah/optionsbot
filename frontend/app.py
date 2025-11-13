@@ -536,8 +536,8 @@ class LiveTradingApp:
                     st.write(idea["rationale"])
                     st.write(idea["trade_idea"])
                     metrics = idea.get("metrics", {})
-                        if metrics:
-                            st.table(self._metrics_table(metrics))
+                    if metrics:
+                        st.table(self._metrics_table(metrics))
                     st.caption("Sample order (validate prices before trading):")
                     st.code(json.dumps(idea["order_example"], indent=2), language="json")
 
