@@ -648,8 +648,8 @@ class LiveTradingApp:
                     st.write(idea["rationale"])
                     st.write(idea["trade_idea"])
                     metrics = idea.get("metrics", {})
-                        if metrics:
-                            st.table(self._metrics_table(metrics))
+                    if metrics:
+                        st.table(self._metrics_table(metrics))
                     st.caption("Example order structure (edit before use):")
                     st.code(json.dumps(idea["order_example"], indent=2), language="json")
                     self._render_favorite_button(idea, f"live_{idx}")
