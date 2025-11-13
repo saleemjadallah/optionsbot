@@ -8,8 +8,9 @@ surfaces portfolio analytics, trade ideas, risk metrics, and order routing.
 from __future__ import annotations
 
 import json
+import hashlib
 from datetime import datetime, timezone
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 import pandas as pd
 import plotly.express as px
@@ -337,8 +338,13 @@ class LiveTradingApp:
     def _idea_cache_key(self, idea: Dict[str, Any], group: str) -> str:
         symbol = idea.get("symbol", "N/A")
         strategy = idea.get("suggested_strategy", "Unknown")
-        expiry = idea.get("order_example", {}).get("legs", [{}])[0].get("symbol", "")
-        return f"{group}:{symbol}:{strategy}:{expiry}"
+        unique_payload = {
+            "trade": idea.get("trade_idea"),
+            "legs": idea.get("order_example", {}).get("legs", []),
+        }
+        unique_str = json.dumps(unique_payload, sort_keys=True, default=str)
+        digest = hashlib.sha256(unique_str.encode("utf-8")).hexdigest()[:10]
+        return f"{group}:{symbol}:{strategy}:{digest}"
 
     def _favorite_key(self, idea: Dict[str, Any]) -> str:
         return f"{idea.get('symbol')}::{idea.get('suggested_strategy')}::{idea.get('trade_idea')}"
@@ -381,12 +387,14 @@ class LiveTradingApp:
         }
         st.success("Sent to Tastytrade as a preview (no execution).")
 
-    def _render_preview_controls(self, idea: Dict[str, Any], group: str) -> None:
+    def _render_preview_controls(self, idea: Dict[str, Any], group: str, idx: int = 0) -> None:
         order_payload = idea.get("order_example")
         cache_key = self._idea_cache_key(idea, group)
+        # Add index to ensure unique button keys even if cache_key is identical
+        button_key = f"preview_{cache_key}_{idx}"
         disabled = order_payload is None
         button_label = "Preview in Tastytrade" if not disabled else "No Order Example Available"
-        if st.button(button_label, key=f"preview_{cache_key}", disabled=disabled):
+        if st.button(button_label, key=button_key, disabled=disabled):
             self._preview_order(order_payload, cache_key)
         cached = st.session_state.idea_dry_runs.get(cache_key)
         if cached:
@@ -453,10 +461,7 @@ class LiveTradingApp:
                 st.write(idea.get("trade_idea"))
                 metrics = idea.get("metrics", {})
                 if metrics:
-                    metrics_df = pd.DataFrame(
-                        [{"Metric": k.replace('_', ' ').title(), "Value": v} for k, v in metrics.items()]
-                    )
-                    st.table(metrics_df)
+                    st.table(self._metrics_table(metrics))
                 st.caption("Saved snapshot. Re-run ensemble for up-to-date pricing before trading.")
 
     # ------------------------------------------------------------------
@@ -516,10 +521,7 @@ class LiveTradingApp:
                     st.write(idea["trade_idea"])
                     metrics = idea.get("metrics", {})
                     if metrics:
-                        metrics_df = pd.DataFrame(
-                            [{"Metric": k.replace('_', ' ').title(), "Value": v} for k, v in metrics.items()]
-                        )
-                        st.table(metrics_df)
+                        st.table(self._metrics_table(metrics))
                     st.caption("Example structure (adjust symbol/strikes before trading):")
                     st.code(json.dumps(idea["order_example"], indent=2), language="json")
 
@@ -534,11 +536,8 @@ class LiveTradingApp:
                     st.write(idea["rationale"])
                     st.write(idea["trade_idea"])
                     metrics = idea.get("metrics", {})
-                    if metrics:
-                        metrics_df = pd.DataFrame(
-                            [{"Metric": k.replace('_', ' ').title(), "Value": v} for k, v in metrics.items()]
-                        )
-                        st.table(metrics_df)
+                        if metrics:
+                            st.table(self._metrics_table(metrics))
                     st.caption("Sample order (validate prices before trading):")
                     st.code(json.dumps(idea["order_example"], indent=2), language="json")
 
@@ -649,15 +648,12 @@ class LiveTradingApp:
                     st.write(idea["rationale"])
                     st.write(idea["trade_idea"])
                     metrics = idea.get("metrics", {})
-                    if metrics:
-                        metrics_df = pd.DataFrame(
-                            [{"Metric": k.replace('_', ' ').title(), "Value": v} for k, v in metrics.items()]
-                        )
-                        st.table(metrics_df)
+                        if metrics:
+                            st.table(self._metrics_table(metrics))
                     st.caption("Example order structure (edit before use):")
                     st.code(json.dumps(idea["order_example"], indent=2), language="json")
                     self._render_favorite_button(idea, f"live_{idx}")
-                    self._render_preview_controls(idea, "live")
+                    self._render_preview_controls(idea, "live", idx)
         else:
             st.info("No trade ideas generated for the current portfolio.")
 
@@ -705,14 +701,11 @@ class LiveTradingApp:
                     st.write(idea["trade_idea"])
                     metrics = idea.get("metrics", {})
                     if metrics:
-                        metrics_df = pd.DataFrame(
-                            [{"Metric": k.replace('_', ' ').title(), "Value": v} for k, v in metrics.items()]
-                        )
-                        st.table(metrics_df)
+                        st.table(self._metrics_table(metrics))
                     st.caption("Sample order (validate pricing before trading):")
                     st.code(json.dumps(idea["order_example"], indent=2), language="json")
                     self._render_favorite_button(idea, f"universe_{idx}")
-                    self._render_preview_controls(idea, "universe")
+                    self._render_preview_controls(idea, "universe", idx)
         else:
             st.info("No proactive opportunities met the edge thresholds this cycle.")
 
@@ -822,6 +815,33 @@ class LiveTradingApp:
     # ------------------------------------------------------------------
     # Utility
     # ------------------------------------------------------------------
+
+    @staticmethod
+    def _format_metric_value(value: Any) -> str:
+        if isinstance(value, (int, float)):
+            if abs(value) >= 100:
+                return f"{value:,.0f}"
+            if abs(value) >= 1:
+                return f"{value:,.2f}"
+            return f"{value:.4f}"
+        if isinstance(value, dict):
+            return json.dumps(value, default=str)
+        if value is None:
+            return "—"
+        return str(value)
+
+    @classmethod
+    def _metrics_table(cls, metrics: Dict[str, Any]) -> pd.DataFrame:
+        rows = [
+            {
+                "Metric": key.replace("_", " ").title(),
+                "Value": cls._format_metric_value(val),
+            }
+            for key, val in metrics.items()
+        ]
+        if not rows:
+            return pd.DataFrame(columns=["Metric", "Value"])
+        return pd.DataFrame(rows, dtype="object")
 
     @staticmethod
     def _positions_dataframe(positions: List[Dict]) -> pd.DataFrame:
@@ -1036,5 +1056,3 @@ if __name__ == "__main__":
         app.run()
     except Exception as exc:
         st.exception(exc)
-        self.universe_min_edge = st.session_state.get("universe_min_edge", StrategyEngine.ENSEMBLE_EDGE_THRESHOLD * 100)
-        self.universe_min_conf = st.session_state.get("universe_min_conf", StrategyEngine.ENSEMBLE_CONFIDENCE_THRESHOLD * 100)
