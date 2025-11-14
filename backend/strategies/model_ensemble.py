@@ -80,10 +80,12 @@ class ModelEnsemble:
     def __init__(self, risk_level: str = 'moderate'):
         self.risk_level = risk_level
         self.models = self._initialize_models()
+        # Equal starting weights for all 3 active models (ML disabled)
+        # Let performance tracking determine optimal weights naturally
         self.model_weights = {
-            'black_scholes': 0.25,
-            'merton_jump': 0.35,
-            'heston': 0.4,
+            'black_scholes': 0.333,
+            'merton_jump': 0.333,
+            'heston': 0.334,  # Slightly higher to sum to 1.0
             # 'ml_neural': 0.25  # Disabled
         }
         self.performance_tracker = {}
@@ -203,10 +205,16 @@ class ModelEnsemble:
             bs_price = self.models['black_scholes'].price(S, K, T, r, bs_iv, option_type)
             bs_greeks = self.models['black_scholes'].calculate_greeks(S, K, T, r, bs_iv, option_type)
 
+            # Dynamic BS confidence: lower in high-volatility environments
+            # BS assumptions (constant vol, no jumps) break down when VIX is high
+            recent_vol = self._calculate_recent_volatility(market_data)
+            # Normalize volatility: 0.1 (10% vol) -> high confidence, 0.5 (50%+ vol) -> low confidence
+            bs_confidence = 0.65 + (1 - min(recent_vol / 0.5, 1.0)) * 0.20  # Range: 0.65-0.85
+
             predictions.append(ModelPrediction(
                 model_name='black_scholes',
                 predicted_price=bs_price,
-                confidence=0.7,  # BS has moderate confidence in all regimes
+                confidence=bs_confidence,
                 implied_vol=bs_iv,
                 greeks=bs_greeks,
                 fit_quality=self._calculate_bs_fit_quality(symbol, market_data),
@@ -228,8 +236,12 @@ class ModelEnsemble:
                 S, K, T, r, merton_params, option_type
             )
 
-            # Merton confidence is higher during volatile periods
-            merton_confidence = 0.9 if regime in [MarketRegime.VOLATILE, MarketRegime.CRISIS] else 0.6
+            # Merton confidence is higher during volatile periods (jump processes)
+            # Balanced range: 0.65-0.85 (was 0.6-0.9)
+            if regime in [MarketRegime.VOLATILE, MarketRegime.CRISIS]:
+                merton_confidence = 0.85  # High confidence when jumps are likely
+            else:
+                merton_confidence = 0.65  # Moderate confidence in calm markets
 
             predictions.append(ModelPrediction(
                 model_name='merton_jump',
@@ -253,9 +265,19 @@ class ModelEnsemble:
                 S, K, T, r, heston_params, option_type
             )
 
-            # Heston confidence varies with volatility clustering
+            # Heston confidence varies with volatility clustering and regime
+            # Normalized range to 0.65-0.85 to match other models better
+            # Heston excels when stochastic volatility is important
             vol_clustering = self._measure_volatility_clustering(market_data)
-            heston_confidence = min(0.95, 0.6 + vol_clustering * 0.4)
+            recent_vol = self._calculate_recent_volatility(market_data)
+
+            # Base confidence on both clustering and vol level
+            base_heston_conf = 0.65
+            if regime in [MarketRegime.VOLATILE, MarketRegime.CRISIS]:
+                base_heston_conf = 0.75  # Higher in volatile markets where SV matters
+
+            # Add clustering bonus (0-0.10)
+            heston_confidence = min(0.85, base_heston_conf + vol_clustering * 0.10)
 
             predictions.append(ModelPrediction(
                 model_name='heston',
@@ -528,9 +550,9 @@ class ModelEnsemble:
                 # 'ml_neural': 1.1         # ML good at pattern recognition (Disabled)
             },
             MarketRegime.VOLATILE: {
-                'black_scholes': 0.7,    # BS underperforms in volatile markets
-                'merton_jump': 1.3,      # Jump models shine
-                'heston': 1.2,           # Stochastic vol important
+                'black_scholes': 0.8,    # BS underperforms but not drastically
+                'merton_jump': 1.2,      # Jump models important (reduced from 1.3)
+                'heston': 1.2,           # Stochastic vol equally important
                 # 'ml_neural': 0.9  # Disabled
             },
             MarketRegime.TRENDING: {
@@ -540,9 +562,9 @@ class ModelEnsemble:
                 # 'ml_neural': 1.2         # ML good at trend recognition (Disabled)
             },
             MarketRegime.CRISIS: {
-                'black_scholes': 0.5,    # BS breaks down in crisis
-                'merton_jump': 1.5,      # Jumps very important
-                'heston': 1.1,
+                'black_scholes': 0.6,    # BS struggles but not completely
+                'merton_jump': 1.3,      # Jumps important (reduced from 1.5)
+                'heston': 1.2,           # Stochastic vol also critical in crisis
                 # 'ml_neural': 0.8         # ML may not have crisis training data (Disabled)
             }
         }

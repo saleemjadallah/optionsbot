@@ -556,6 +556,26 @@ class TastytradeAuthManager:
 
     @staticmethod
     def _extract_error_detail(response: requests.Response) -> str:
+        def _stringify(detail: Any) -> Optional[str]:
+            if detail is None:
+                return None
+            if isinstance(detail, dict):
+                parts = []
+                for key, value in detail.items():
+                    if isinstance(value, (list, tuple, set)):
+                        value_str = ", ".join(str(item) for item in value)
+                    elif isinstance(value, dict):
+                        inner = "; ".join(f"{k}={v}" for k, v in value.items())
+                        value_str = inner or str(value)
+                    else:
+                        value_str = str(value)
+                    parts.append(f"{key}: {value_str}")
+                return "; ".join(parts) if parts else None
+            if isinstance(detail, (list, tuple, set)):
+                values = [str(item) for item in detail if item]
+                return "; ".join(values) if values else None
+            return str(detail)
+
         try:
             payload = response.json()
         except ValueError:
@@ -568,6 +588,9 @@ class TastytradeAuthManager:
             base_msg = single_error.get("message") or single_error.get("code")
             if base_msg:
                 sections.append(base_msg)
+            extra = _stringify(single_error.get("details"))
+            if extra:
+                sections.append(extra)
 
         list_errors = payload.get("errors")
         if isinstance(list_errors, list):
@@ -575,18 +598,20 @@ class TastytradeAuthManager:
                 if not isinstance(err, dict):
                     continue
                 msg = err.get("message") or err.get("code")
-                detail = err.get("details")
-                if isinstance(detail, dict):
-                    detail_parts = [f"{k}: {v}" for k, v in detail.items()]
-                    detail_text = "; ".join(detail_parts)
-                    msg = f"{msg} ({detail_text})" if detail_text else msg
+                detail_text = _stringify(err.get("details"))
+                if detail_text:
+                    msg = f"{msg} ({detail_text})" if msg else detail_text
                 if msg:
                     sections.append(msg)
 
+        fallback_detail = payload.get("detail") or payload.get("message")
+        if not sections and fallback_detail:
+            sections.append(str(fallback_detail))
+
         if not sections:
-            detail = payload.get("detail") or payload.get("message")
-            if detail:
-                sections.append(str(detail))
+            extra = _stringify(payload.get("details"))
+            if extra:
+                sections.append(extra)
 
         if sections:
             return " | ".join(sections)
